@@ -166,7 +166,7 @@ pub(crate) mod internal_prelude {
 use internal_prelude::*;
 
 mod core;
-pub use crate::core::{qreal, QByteArray, QString, QUrl};
+pub use crate::core::{qreal, QByteArray, QSettings, QString, QUrl};
 
 mod gui;
 pub use crate::gui::{QColor, QColorNameFormat, QColorSpec, QRgb, QRgba64};
