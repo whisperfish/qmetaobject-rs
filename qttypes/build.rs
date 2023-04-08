@@ -242,6 +242,7 @@ fn main() {
     println!("cargo:rerun-if-changed=src/lib.rs");
     println!("cargo:rerun-if-changed=src/core/primitives.rs");
     println!("cargo:rerun-if-changed=src/core/qbytearray.rs");
+    println!("cargo:rerun-if-changed=src/core/qsettings.rs");
     println!("cargo:rerun-if-changed=src/core/qstring.rs");
     println!("cargo:rerun-if-changed=src/core/qurl.rs");
     println!("cargo:rerun-if-changed=src/gui/qcolor.rs");
