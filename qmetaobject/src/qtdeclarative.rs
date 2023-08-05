@@ -28,7 +28,7 @@ cpp! {{
     #include <memory>
     #include <QtQuick/QtQuick>
     #include <QtCore/QDebug>
-    #include <QtGuiApplication>
+    #include <QGuiApplication>
     #include <QtQml/QQmlComponent>
 
     struct SingleApplicationGuard {
