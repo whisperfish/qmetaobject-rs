@@ -47,12 +47,12 @@ cpp! {{
     };
 
     struct QmlEngineHolder : SingleApplicationGuard {
-        std::unique_ptr<QApplication> app;
+        std::unique_ptr<QGuiApplication> app;
         std::unique_ptr<QQmlApplicationEngine> engine;
         std::unique_ptr<QQuickView> view;
 
         QmlEngineHolder(int &argc, char **argv)
-            : app(new QApplication(argc, argv))
+            : app(new QGuiApplication(argc, argv))
             , engine(new QQmlApplicationEngine())
         {}
     };
