@@ -16,8 +16,42 @@ OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 use cpp::cpp;
+use std::hash::{Hash, Hasher};
 
 use super::*;
+
+/// Since Rust 1.72, TypeId.t is now u128, so Qt/C++ doesn't accept it.
+/// The field is private, so it can't be simply casted. To prevent unsafe code,
+/// the next best thing is "copy-hasher" which uses TypeId.hash() function,
+/// which does the cast for us. Think of all this as "type_id.t as u64".
+struct TypeIdHasher(u64);
+
+impl Hasher for TypeIdHasher {
+    fn write(&mut self, _: &[u8]) {
+        panic!();
+    }
+
+    fn write_u64(&mut self, value: u64) {
+        self.0 = value;
+    }
+
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+fn get_type_hash<T: std::any::Any>() -> u64 {
+    let mut s: TypeIdHasher = TypeIdHasher(0);
+    std::any::TypeId::of::<T>().hash(&mut s);
+    s.finish()
+}
+
+#[test]
+fn type_id_hasher() {
+    let a = get_type_hash::<u16>();
+    let b = get_type_hash::<u32>();
+    assert_ne!(a, b);
+}
 
 /// A typed node in the scene graph
 ///
@@ -150,7 +184,7 @@ impl SGNode<ContainerNode> {
         F: FnMut(<Iter as Iterator>::Item, SGNode<T>) -> SGNode<T>,
     {
         let mut raw = self.raw;
-        let type_id = std::any::TypeId::of::<T>();
+        let type_id = get_type_hash::<T>();
         let len = iter.len();
         assert!(len <= 64, "There is a limit of 64 child nodes");
         let mut mask = 0u64;
@@ -213,7 +247,7 @@ impl SGNode<ContainerNode> {
     /// # }
     ///  ```
     pub fn update_static<A: 'static, T: UpdateNodeFnTuple<A>>(&mut self, info: T) {
-        let type_id = std::any::TypeId::of::<A>();
+        let type_id = get_type_hash::<A>();
         let mut mask = 0u64;
         if self.raw.is_null() {
             self.raw = cpp!(unsafe [type_id as "quint64"] -> *mut c_void as "QSGNode*" {
