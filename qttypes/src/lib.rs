@@ -29,7 +29,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //! - `DEP_QT_VERSION`: The Qt version as given by qmake.
 //! - `DEP_QT_INCLUDE_PATH`: The include directory to give to the `cpp_build` crate to locate the Qt headers.
 //! - `DEP_QT_LIBRARY_PATH`: The path containing the Qt libraries.
-//! - `DEP_QT_FOUND`: Set to 1 when qt was found, or 0 if qt was not found and the `mandatory` feature is not set.
+//! - `DEP_QT_COMPILE_FLAGS`: A list of flags separated by `;`
+//! - `DEP_QT_FOUND`: Set to 1 when qt was found, or 0 if qt was not found and the `required` feature is not set.
+//! - `DEP_QT_ERROR_MESSAGE`: when `DEP_QT_FOUND` is 0, contains the error that caused the build to fail
 //!
 //! ## Finding Qt
 //!
@@ -70,21 +72,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //! cpp_build = "0.5"
 //! ```
 //!
-//! Note: It is importent to depend directly on `qttype`, it is not enough to rely on the
+//! Note: It is important to depend directly on `qttype`, it is not enough to rely on the
 //! dependency coming transitively from another dependencies, otherwise the `DEP_QT_*`
 //! environment variables won't be defined.
 //!
 //! Then in the `build.rs` file:
-//! ```ignore
+//! ```rust,no_run
 //! fn main() {
-//!     cpp_build::Config::new()
-//!         .include(&qt_include_path)
-//!         .include(format!("{}/QtGui", qt_include_path))
-//!         .include(format!("{}/QtCore", qt_include_path))
-//!         .flag_if_supported("-std=c++17")
-//!         .flag_if_supported("/std:c++17")
-//!         .flag_if_supported("/Zc:__cplusplus")
-//!         .build("src/main.rs");
+//!     let mut config = cpp_build::Config::new();
+//!     config.include(std::env::var("DEP_QT_INCLUDE_PATH").unwrap());
+//!     for f in std::env::var("DEP_QT_COMPILE_FLAGS").unwrap().split_terminator(";") {
+//!        config.flag(f);
+//!     }
+//!     config.build("src/main.rs");
 //! }
 //! ```
 //!
@@ -123,6 +123,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 use std::collections::HashMap;
 use std::convert::From;
 use std::fmt;
+use std::hash::Hash;
 use std::iter::FromIterator;
 use std::ops::{Index, IndexMut};
 
@@ -165,11 +166,14 @@ pub(crate) mod internal_prelude {
 }
 use internal_prelude::*;
 
-mod core;
-pub use crate::core::{qreal, QByteArray, QSettings, QString, QUrl};
+mod qtcore;
+pub use crate::qtcore::{
+    qreal, NormalizationForm, QByteArray, QListIterator, QSettings, QString, QStringList, QUrl,
+    QVariant, QVariantList, UnicodeVersion,
+};
 
-mod gui;
-pub use crate::gui::{QColor, QColorNameFormat, QColorSpec, QRgb, QRgba64};
+mod qtgui;
+pub use crate::qtgui::{QColor, QColorNameFormat, QColorSpec, QRgb, QRgba64};
 
 cpp! {{
     #include <QtCore/QByteArray>
@@ -519,359 +523,322 @@ fn test_qdatetime_is_valid() {
 }
 
 cpp_class!(
-    /// Wrapper around [`QVariant`][class] class.
+    /// Wrapper around [`QVariantMap`][type] typedef.
     ///
-    /// [class]: https://doc.qt.io/qt-5/qvariant.html
-    #[derive(PartialEq)]
-    pub unsafe struct QVariant as "QVariant"
+    /// [type]: https://doc.qt.io/qt-5/qvariant.html#QVariantMap-typedef
+    #[derive(Default, PartialEq, Eq)]
+    pub unsafe struct QVariantMap as "QVariantMap"
 );
-impl QVariant {
-    /// Wrapper around [`toByteArray()`][method] method.
-    ///
-    /// [method]: https://doc.qt.io/qt-5/qvariant.html#toByteArray
-    pub fn to_qbytearray(&self) -> QByteArray {
-        cpp!(unsafe [self as "const QVariant*"] -> QByteArray as "QByteArray" {
-            return self->toByteArray();
-        })
-    }
 
-    /// Wrapper around [`toBool()`][method] method.
-    ///
-    /// [method]: https://doc.qt.io/qt-5/qvariant.html#toBool
-    pub fn to_bool(&self) -> bool {
-        cpp!(unsafe [self as "const QVariant*"] -> bool as "bool" {
-            return self->toBool();
-        })
-    }
-
-    /// Wrapper around [`userType()`][method] method.
-    ///
-    /// [method]: https://doc.qt.io/qt-5/qvariant.html#userType
-    pub fn user_type(&self) -> i32 {
-        cpp!(unsafe [self as "const QVariant*"] -> i32 as "int" {
-            return self->userType();
-        })
-    }
-
-    // FIXME: do more wrappers
-}
-impl From<QString> for QVariant {
-    /// Wrapper around [`QVariant(const QString &)`][ctor] constructor.
-    ///
-    /// [ctor]: https://doc.qt.io/qt-5/qvariant.html#QVariant-14
-    fn from(a: QString) -> QVariant {
-        cpp!(unsafe [a as "QString"] -> QVariant as "QVariant" {
-            return QVariant(a);
-        })
-    }
-}
-impl From<QByteArray> for QVariant {
-    /// Wrapper around [`QVariant(const QByteArray &)`][ctor] constructor.
-    ///
-    /// [ctor]: https://doc.qt.io/qt-5/qvariant.html#QVariant-12
-    fn from(a: QByteArray) -> QVariant {
-        cpp!(unsafe [a as "QByteArray"] -> QVariant as "QVariant" {
-            return QVariant(a);
-        })
-    }
-}
-impl From<QDate> for QVariant {
-    /// Wrapper around [`QVariant(const QDate &)`][ctor] constructor.
-    ///
-    /// [ctor]: https://doc.qt.io/qt-5/qvariant.html#QVariant-18
-    fn from(a: QDate) -> QVariant {
-        cpp!(unsafe [a as "QDate"] -> QVariant as "QVariant" {
-            return QVariant(a);
-        })
-    }
-}
-impl From<QTime> for QVariant {
-    /// Wrapper around [`QVariant(const QTime &)`][ctor] constructor.
-    ///
-    /// [ctor]: https://doc.qt.io/qt-5/qvariant.html#QVariant-19
-    fn from(a: QTime) -> QVariant {
-        cpp!(unsafe [a as "QTime"] -> QVariant as "QVariant" {
-            return QVariant(a);
-        })
-    }
-}
-impl From<QDateTime> for QVariant {
-    /// Wrapper around [`QVariant(const QDateTime &)`][ctor] constructor.
-    ///
-    /// [ctor]: https://doc.qt.io/qt-5/qvariant.html#QVariant-20
-    fn from(a: QDateTime) -> QVariant {
-        cpp!(unsafe [a as "QDateTime"] -> QVariant as "QVariant" {
-            return QVariant(a);
-        })
-    }
-}
-impl From<QUrl> for QVariant {
-    /// Wrapper around [`QVariant(const QUrl &)`][ctor] constructor.
-    ///
-    /// [ctor]: https://doc.qt.io/qt-5/qvariant.html#QVariant-35
-    fn from(a: QUrl) -> QVariant {
-        cpp!(unsafe [a as "QUrl"] -> QVariant as "QVariant" {
-            return QVariant(a);
-        })
-    }
-}
-impl From<QVariantList> for QVariant {
-    /// Wrapper around [`QVariant(const QVariantList &)`][ctor] constructor.
-    ///
-    /// [ctor]: https://doc.qt.io/qt-5/qvariant.html#QVariant-21
-    fn from(a: QVariantList) -> QVariant {
-        cpp!(unsafe [a as "QVariantList"] -> QVariant as "QVariant" {
-            return QVariant(a);
-        })
-    }
-}
-impl From<i32> for QVariant {
-    /// Wrapper around [`QVariant(int)`][ctor] constructor.
-    ///
-    /// [ctor]: https://doc.qt.io/qt-5/qvariant.html#QVariant-4
-    fn from(a: i32) -> QVariant {
-        cpp!(unsafe [a as "int"] -> QVariant as "QVariant" {
-            return QVariant(a);
-        })
-    }
-}
-impl From<u32> for QVariant {
-    /// Wrapper around [`QVariant(uint)`][ctor] constructor.
-    ///
-    /// [ctor]: https://doc.qt.io/qt-5/qvariant.html#QVariant-5
-    fn from(a: u32) -> QVariant {
-        cpp!(unsafe [a as "uint"] -> QVariant as "QVariant" {
-            return QVariant(a);
-        })
-    }
-}
-impl From<i64> for QVariant {
-    /// Wrapper around [`QVariant(int)`][ctor] constructor.
-    ///
-    /// [ctor]: https://doc.qt.io/qt-5/qvariant.html#QVariant-4
-    fn from(a: i64) -> QVariant {
-        cpp!(unsafe [a as "qlonglong"] -> QVariant as "QVariant" {
-            return QVariant(a);
-        })
-    }
-}
-impl From<u64> for QVariant {
-    /// Wrapper around [`QVariant(uint)`][ctor] constructor.
-    ///
-    /// [ctor]: https://doc.qt.io/qt-5/qvariant.html#QVariant-5
-    fn from(a: u64) -> QVariant {
-        cpp!(unsafe [a as "qulonglong"] -> QVariant as "QVariant" {
-            return QVariant(a);
-        })
-    }
-}
-impl From<f32> for QVariant {
-    /// Wrapper around [`QVariant(float)`][ctor] constructor.
-    ///
-    /// [ctor]: https://doc.qt.io/qt-5/qvariant.html#QVariant-10
-    fn from(a: f32) -> QVariant {
-        cpp!(unsafe [a as "float"] -> QVariant as "QVariant" {
-            return QVariant(a);
-        })
-    }
-}
-impl From<f64> for QVariant {
-    /// Wrapper around [`QVariant(double)`][ctor] constructor.
-    ///
-    /// [ctor]: https://doc.qt.io/qt-5/qvariant.html#QVariant-9
-    fn from(a: f64) -> QVariant {
-        cpp!(unsafe [a as "double"] -> QVariant as "QVariant" {
-            return QVariant(a);
-        })
-    }
-}
-impl From<bool> for QVariant {
-    /// Wrapper around [`QVariant(bool)`][ctor] constructor.
-    ///
-    /// [ctor]: https://doc.qt.io/qt-5/qvariant.html#QVariant-8
-    fn from(a: bool) -> QVariant {
-        cpp!(unsafe [a as "bool"] -> QVariant as "QVariant" {
-            return QVariant(a);
-        })
-    }
-}
-impl<'a, T> From<&'a T> for QVariant
-where
-    T: Into<QVariant> + Clone,
-{
-    fn from(a: &'a T) -> QVariant {
-        (*a).clone().into()
-    }
-}
-
-cpp_class!(
-    /// Wrapper around [`QVariantList`][type] typedef.
-    ///
-    /// [type]: https://doc.qt.io/qt-5/qvariant.html#QVariantList-typedef
-    pub unsafe struct QVariantList as "QVariantList"
-);
-impl QVariantList {
-    /// Wrapper around [`append(const T &)`][method] method.
-    ///
-    /// [method]: https://doc.qt.io/qt-5/qlist.html#append
-    pub fn push(&mut self, value: QVariant) {
-        cpp!(unsafe [self as "QVariantList*", value as "QVariant"] {
-            self->append(std::move(value));
-        })
-    }
-
-    /// Wrapper around [`insert(int, const QVariant &)`][method] method.
+impl QVariantMap {
+    /// Wrapper around [`insert(int, const QString &, const QVariant &)`][method] method.
     ///
     /// [method]: https://doc.qt.io/qt-5/qlist.html#insert
-    pub fn insert(&mut self, index: usize, element: QVariant) {
-        cpp!(unsafe [self as "QVariantList*", index as "size_t", element as "QVariant"] {
-            self->insert(index, std::move(element));
+    pub fn insert(&mut self, key: QString, element: QVariant) {
+        cpp!(unsafe [self as "QVariantMap*", key as "QString", element as "QVariant"] {
+            self->insert(key, std::move(element));
         })
     }
 
-    /// Wrapper around [`takeAt(int)`][method] method.
+    /// Wrapper around [`remove(const QString &)`][method] method.
     ///
-    /// [method]: https://doc.qt.io/qt-5/qlist.html#takeAt
-    pub fn remove(&mut self, index: usize) -> QVariant {
-        cpp!(unsafe [self as "QVariantList*", index as "size_t"] -> QVariant as "QVariant" {
-            return self->takeAt(index);
+    /// [method]: https://doc.qt.io/qt-5/qmap.html#remove
+    pub fn remove(&mut self, key: QString) -> usize {
+        cpp!(unsafe [self as "QVariantMap*", key as "QString"] -> usize as "size_t" {
+            return self->remove(key);
+        })
+    }
+
+    /// Wrapper around [`take(const QString &)`][method] method.
+    ///
+    /// [method]: https://doc.qt.io/qt-5/qmap.html#take
+    pub fn take(&mut self, key: QString) -> QVariant {
+        cpp!(unsafe [self as "QVariantMap*", key as "QString"] -> QVariant as "QVariant" {
+            return self->take(key);
         })
     }
 
     /// Wrapper around [`size()`][method] method.
     ///
-    /// [method]: https://doc.qt.io/qt-5/qlist.html#size
+    /// [method]: https://doc.qt.io/qt-5/qmap.html#size
     pub fn len(&self) -> usize {
-        cpp!(unsafe [self as "QVariantList*"] -> usize as "size_t" {
+        cpp!(unsafe [self as "const QVariantMap*"] -> usize as "size_t" {
             return self->size();
         })
     }
 
     /// Wrapper around [`isEmpty()`][method] method.
     ///
-    /// [method]: https://doc.qt.io/qt-5/qlist.html#isEmpty
+    /// [method]: https://doc.qt.io/qt-5/qmap.html#isEmpty
     pub fn is_empty(&self) -> bool {
-        cpp!(unsafe [self as "QVariantList*"] -> bool as "bool" {
+        cpp!(unsafe [self as "const QVariantMap*"] -> bool as "bool" {
             return self->isEmpty();
         })
     }
+
+    /// Wrapper around [`contains(const QString &)`][method] method.
+    ///
+    /// [method]: https://doc.qt.io/qt-5/qmap.html#contains
+    pub fn contains(&self, key: QString) -> bool {
+        cpp!(unsafe [self as "const QVariantMap*", key as "QString"] -> bool as "bool" {
+            return self->contains(key);
+        })
+    }
+
+    /// Wrapper around [`clear()`][method] method.
+    ///
+    /// [method]: https://doc.qt.io/qt-5/qmap.html#clear
+    pub fn clear(&mut self) {
+        cpp!(unsafe [self as "QVariantMap*"] {
+            self->clear();
+        })
+    }
+
+    /// Wrapper around [`value(const QString &, const QVariant &)`][method] method.
+    ///
+    /// [method]: https://doc.qt.io/qt-5/qmap.html#value
+    pub fn value(&self, key: QString, default_value: QVariant) -> QVariant {
+        cpp!(unsafe [self as "const QVariantMap*", key as "QString", default_value as "QVariant"] -> QVariant as "QVariant" {
+            return self->value(key, default_value);
+        })
+    }
+
+    /// Wrapper around [`key(const QVariant &, const QString &)`][method] method.
+    ///
+    /// [method]: https://doc.qt.io/qt-5/qmap.html#key
+    pub fn key(&self, value: QVariant, default_key: QString) -> QString {
+        cpp!(unsafe [self as "const QVariantMap*", default_key as "QString", value as "QVariant"] -> QString as "QString" {
+            return self->key(value, default_key);
+        })
+    }
 }
-impl Index<usize> for QVariantList {
+
+impl Index<QString> for QVariantMap {
     type Output = QVariant;
 
     /// Wrapper around [`at(int)`][method] method.
     ///
     /// [method]: https://doc.qt.io/qt-5/qlist.html#at
-    fn index(&self, index: usize) -> &QVariant {
-        assert!(index < self.len());
-        unsafe {
-            &*cpp!([self as "QVariantList*", index as "size_t"] -> *const QVariant as "const QVariant*" {
-                return &self->at(index);
-            })
-        }
+    #[track_caller]
+    fn index(&self, key: QString) -> &Self::Output {
+        cpp!(unsafe [self as "const QVariantMap*", key as "QString"] -> Option<&QVariant> as "const QVariant*" {
+                auto x = self->constFind(key);
+                if (x == self->constEnd()) {
+                    return NULL;
+                } else {
+                    return &x.value();
+                }
+            }).expect("key not in the QVariant")
     }
 }
-impl IndexMut<usize> for QVariantList {
+impl IndexMut<QString> for QVariantMap {
     /// Wrapper around [`operator[](int)`][method] operator method.
     ///
     /// [method]: https://doc.qt.io/qt-5/qlist.html#operator-5b-5d
-    fn index_mut(&mut self, index: usize) -> &mut QVariant {
-        assert!(index < self.len());
+    fn index_mut(&mut self, key: QString) -> &mut Self::Output {
         unsafe {
-            &mut *cpp!([self as "QVariantList*", index as "size_t"] -> *mut QVariant as "QVariant*" {
-                return &(*self)[index];
+            &mut *cpp!([self as "QVariantMap*", key as "QString"] -> *mut QVariant as "QVariant*" {
+                return &(*self)[key];
             })
         }
     }
 }
 
-/// Internal class used to iterate over a [`QVariantList`][]
-///
-/// [`QVariantList`]: ./struct.QVariantList.html
-pub struct QVariantListIterator<'a> {
-    list: &'a QVariantList,
-    index: usize,
-    size: usize,
+impl fmt::Debug for QVariantMap {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_map().entries(self.into_iter()).finish()
+    }
 }
 
-impl<'a> Iterator for QVariantListIterator<'a> {
-    type Item = &'a QVariant;
-    fn next(&mut self) -> Option<&'a QVariant> {
-        if self.index == self.size {
-            None
-        } else {
-            self.index += 1;
-            Some(&self.list[self.index - 1])
+cpp_class!(unsafe struct QVariantMapIteratorInternal as "QVariantMap::iterator");
+
+/// Internal class used to iterate over a [`QVariantMap`]
+pub struct QVariantMapIterator<'a> {
+    map: &'a QVariantMap,
+    iterator: QVariantMapIteratorInternal,
+}
+
+impl<'a> QVariantMapIterator<'a> {
+    fn key(&self) -> Option<&'a QString> {
+        let iterator = &self.iterator;
+        cpp!(unsafe [iterator as "const QVariantMap::iterator*"] -> Option<&QString> as "const QString*" {
+            return &iterator->key();
+        })
+    }
+
+    fn value(&self) -> Option<&'a QVariant> {
+        let iterator = &self.iterator;
+        cpp!(unsafe [iterator as "const QVariantMap::iterator*"] -> Option<&QVariant> as "QVariant*" {
+            return &iterator->value();
+        })
+    }
+
+    fn check_end(&self) -> bool {
+        let map = self.map;
+        let iterator = &self.iterator;
+        cpp!(unsafe [iterator as "const QVariantMap::iterator*", map as "const QVariantMap*"] -> bool as "bool" {
+            return (*iterator == map->end());
+        })
+    }
+
+    fn increment(&mut self) {
+        let iterator = &self.iterator;
+        cpp!(unsafe [iterator as "QVariantMap::iterator*"] {
+            ++(*iterator);
+        })
+    }
+}
+
+impl<'a> Iterator for QVariantMapIterator<'a> {
+    type Item = (&'a QString, &'a QVariant);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.check_end() {
+            return None;
+        }
+
+        let key = self.key();
+        let value = self.value();
+
+        self.increment();
+
+        match (key, value) {
+            (Some(k), Some(v)) => Some((k, v)),
+            _ => None,
         }
     }
 }
 
-impl<'a> IntoIterator for &'a QVariantList {
-    type Item = &'a QVariant;
-    type IntoIter = QVariantListIterator<'a>;
+impl<'a> IntoIterator for &'a QVariantMap {
+    type Item = (&'a QString, &'a QVariant);
+    type IntoIter = QVariantMapIterator<'a>;
 
-    fn into_iter(self) -> QVariantListIterator<'a> {
-        QVariantListIterator::<'a> { list: self, index: 0, size: self.len() }
+    fn into_iter(self) -> Self::IntoIter {
+        let iter = cpp!(unsafe [self as "QVariantMap*"] -> QVariantMapIteratorInternal as "QVariantMap::iterator" {
+            return self->begin();
+        });
+        Self::IntoIter { map: self, iterator: iter }
     }
 }
 
-impl<T> FromIterator<T> for QVariantList
+impl<K, V> FromIterator<(K, V)> for QVariantMap
 where
-    T: Into<QVariant>,
+    K: Into<QString>,
+    V: Into<QVariant>,
 {
-    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> QVariantList {
-        let mut l = QVariantList::default();
+    fn from_iter<I: IntoIterator<Item = (K, V)>>(iter: I) -> Self {
+        let mut m = QVariantMap::default();
         for i in iter {
-            l.push(i.into());
+            let (k, v) = i;
+            m.insert(k.into(), v.into());
         }
-        l
+        m
+    }
+}
+
+impl<K, V> From<HashMap<K, V>> for QVariantMap
+where
+    K: Into<QString>,
+    V: Into<QVariant>,
+{
+    fn from(m: HashMap<K, V>) -> Self {
+        m.into_iter().collect()
+    }
+}
+
+impl<K, V, const N: usize> From<[(K, V); N]> for QVariantMap
+where
+    K: Into<QString>,
+    V: Into<QVariant>,
+{
+    fn from(m: [(K, V); N]) -> Self {
+        let mut temp = QVariantMap::default();
+        for (key, val) in m {
+            temp.insert(key.into(), val.into());
+        }
+        temp
+    }
+}
+
+impl<K, V> From<QVariantMap> for HashMap<K, V>
+where
+    K: Hash + Eq,
+    V: Eq,
+    QString: Into<K>,
+    QVariant: Into<V>,
+{
+    fn from(m: QVariantMap) -> Self {
+        m.into_iter().map(|(k, v)| (k.clone().into(), v.clone().into())).collect()
     }
 }
 
 #[cfg(test)]
-mod tests {
+mod qvariantmap_tests {
     use super::*;
+
     #[test]
-    fn test_qvariantlist() {
-        let mut q = QVariantList::default();
-        q.push(42.into());
-        q.push(QString::from("Hello").into());
-        q.push(QByteArray::from("Hello").into());
-        assert_eq!(q[0].to_qbytearray().to_string(), "42");
-        assert_eq!(q[1].to_qbytearray().to_string(), "Hello");
-        assert_eq!(q[2].to_qbytearray().to_string(), "Hello");
-        let x: Vec<QByteArray> = q.into_iter().map(|x| x.to_qbytearray()).collect();
-        assert_eq!(x[0].to_string(), "42");
-        assert_eq!(x[1].to_string(), "Hello");
-        assert_eq!(x[2].to_string(), "Hello");
+    fn test_qvariantmap() {
+        let mut map = QVariantMap::default();
+
+        let key1 = QString::from("a");
+        let val1 = QString::from("abc");
+
+        assert!(map.is_empty());
+        map.insert(key1.clone(), val1.clone().into());
+        assert_eq!(map.len(), 1);
+        assert_eq!(map[key1.clone()].to_qbytearray().to_string(), val1.to_string());
+
+        assert_eq!(map.take(key1.clone()).to_qbytearray().to_string(), val1.to_string());
+        assert!(map.is_empty());
+
+        map[key1.clone()] = val1.clone().into();
+
+        let default_value = QVariant::from(10);
+
+        assert_eq!(map[key1.clone()].to_qbytearray().to_string(), val1.to_string());
+        assert_eq!(map.value(key1.clone(), default_value.clone()), val1.clone().into());
+        assert_eq!(map.value(val1.clone(), default_value.clone()), default_value.clone());
+
+        assert_eq!(map.key(val1.clone().into(), val1.clone()), key1.clone());
+        assert_eq!(map.key(key1.clone().into(), val1.clone()), val1.clone());
     }
 
     #[test]
-    fn test_qvariantlist_from_iter() {
-        let v = vec![1u32, 2u32, 3u32];
-        let qvl: QVariantList = v.iter().collect();
-        assert_eq!(qvl.len(), 3);
-        assert_eq!(qvl[1].to_qbytearray().to_string(), "2");
+    #[should_panic(expected = "key not in the QVariant")]
+    fn test_index_panic() {
+        let map = QVariantMap::default();
+
+        map[QString::from("t")].to_qbytearray().to_string();
     }
 
     #[test]
-    fn test_qstring_and_qbytearray() {
-        let qba1: QByteArray = (b"hello" as &[u8]).into();
-        let qba2: QByteArray = "hello".into();
-        let s: String = "hello".into();
-        let qba3: QByteArray = s.clone().into();
+    fn test_iter() {
+        let hashmap =
+            HashMap::from([("Mercury", 0.4), ("Venus", 0.7), ("Earth", 1.0), ("Mars", 1.5)]);
+        let map: QVariantMap = hashmap.clone().into();
 
-        assert_eq!(qba1.to_string(), "hello");
-        assert_eq!(qba2.to_string(), "hello");
-        assert_eq!(qba3.to_string(), "hello");
+        assert_eq!(map.len(), hashmap.len());
 
-        let qs1: QString = "hello".into();
-        let qs2: QString = s.into();
-        let qba4: QByteArray = qs1.clone().into();
+        for (k, v) in map.into_iter() {
+            assert_eq!(hashmap[k.to_string().as_str()].to_string(), v.to_qbytearray().to_string());
+        }
+    }
 
-        assert_eq!(qs1.to_string(), "hello");
-        assert_eq!(qs2.to_string(), "hello");
-        assert_eq!(qba4.to_string(), "hello");
+    #[test]
+    fn test_from() {
+        let hashmap1 = HashMap::from([
+            ("A".to_string(), QVariant::from(QString::from("abc"))),
+            ("B".to_string(), QVariant::from(QString::from("def"))),
+        ]);
+        let qvariantmap1: QVariantMap = hashmap1.clone().into();
+        let hashmap2 = qvariantmap1.clone().into();
+        assert_eq!(hashmap1, hashmap2);
+
+        let qvariantmap2 = QVariantMap::from([
+            ("A".to_string(), QVariant::from(QString::from("abc"))),
+            ("B".to_string(), QVariant::from(QString::from("def"))),
+        ]);
+        assert_eq!(qvariantmap1, qvariantmap2);
     }
 }
 
@@ -1028,7 +995,7 @@ pub struct QMargins {
 /// Bindings for [`QImage::Format`][class] enum class.
 ///
 /// [class]: https://doc.qt.io/qt-5/qimage.html#Format-enum
-#[repr(u32)]
+#[repr(C)]
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[allow(non_camel_case_types)]
 pub enum ImageFormat {
@@ -1160,7 +1127,7 @@ impl From<QImage> for QPixmap {
 /// Bindings for [`Qt::PenStyle`][enum] enum.
 ///
 /// [enum]: https://doc.qt.io/qt-5/qt.html#PenStyle-enum
-#[repr(u32)]
+#[repr(C)]
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[allow(non_camel_case_types)]
 pub enum PenStyle {
@@ -1253,7 +1220,7 @@ pub enum QStandardPathLocation {
 /// Bindings for [`Qt::BrushStyle`][enum] enum.
 ///
 /// [enum]: https://doc.qt.io/qt-5/qt.html#BrushStyle-enum
-#[repr(u32)]
+#[repr(C)]
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[allow(non_camel_case_types)]
 pub enum BrushStyle {
@@ -1547,7 +1514,7 @@ impl QPainter {
 /// Bindings for [`QPainter::RenderHint`][enum] enum.
 ///
 /// [enum]: https://doc.qt.io/qt-5/qpainter.html#RenderHint-enum
-#[repr(u32)]
+#[repr(C)]
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[allow(non_camel_case_types)]
 pub enum QPainterRenderHint {
@@ -1667,90 +1634,6 @@ fn test_qjsonvalue() {
     ]);
 
     assert_eq!(values.to_json().to_string(), "[\"test\",true,false,1.2345,456]");
-}
-
-cpp_class!(
-    /// Wrapper around [`QStringList`][class] class.
-    ///
-    /// [class]: https://doc.qt.io/qt-5/qstringlist.html
-    #[derive(Default, Clone)]
-    pub unsafe struct QStringList as "QStringList"
-);
-impl QStringList {
-    pub fn new() -> QStringList {
-        cpp!(unsafe [] -> QStringList as "QStringList" {
-            return QStringList();
-        })
-    }
-
-    pub fn insert(&mut self, index: usize, value: QString) {
-        cpp!(unsafe [self as "QStringList*", index as "size_t", value as "QString"] {
-            self->insert(index, value);
-        });
-    }
-
-    pub fn push(&mut self, value: QString) {
-        cpp!(unsafe [self as "QStringList*", value as "QString"] {
-           self->append(value);
-        });
-    }
-
-    pub fn clear(&mut self) {
-        cpp!(unsafe [self as "QStringList*"] {
-            self->clear();
-        });
-    }
-
-    pub fn remove(&mut self, index: usize) {
-        cpp!(unsafe [self as "QStringList*", index as "size_t"] {
-            self->removeAt(index);
-        })
-    }
-
-    pub fn len(&self) -> usize {
-        cpp!(unsafe [self as "QStringList*"] -> usize as "size_t" { return self->size(); })
-    }
-}
-
-impl Index<usize> for QStringList {
-    type Output = QString;
-
-    fn index(&self, index: usize) -> &QString {
-        unsafe {
-            &*cpp!([self as "QStringList*", index as "size_t"] -> *const QString as "const QString*" {
-                return &(*self)[index];
-            })
-        }
-    }
-}
-
-impl fmt::Debug for QStringList {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut temp = f.debug_list();
-        for i in 0..self.len() {
-            temp.entry(&self[i]);
-        }
-        temp.finish()
-    }
-}
-
-#[test]
-fn test_qstringlist() {
-    let mut qstringlist = QStringList::new();
-    qstringlist.push("One".into());
-    qstringlist.push("Two".into());
-
-    assert_eq!(qstringlist.len(), 2);
-    assert_eq!(qstringlist[0], QString::from("One"));
-
-    qstringlist.remove(0);
-    assert_eq!(qstringlist[0], QString::from("Two"));
-
-    qstringlist.insert(0, "Three".into());
-    assert_eq!(qstringlist[0], QString::from("Three"));
-
-    qstringlist.clear();
-    assert_eq!(qstringlist.len(), 0);
 }
 
 cpp_class!(

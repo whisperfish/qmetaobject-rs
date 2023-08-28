@@ -464,6 +464,7 @@ qdeclare_builtin_metatype! {u16  => 36}
 qdeclare_builtin_metatype! {u8   => 37}
 qdeclare_builtin_metatype! {f32  => 38}
 //qdeclare_builtin_metatype!{"*c_void" => 31}
+qdeclare_builtin_metatype! {QVariantMap => 8}
 qdeclare_builtin_metatype! {QVariantList  => 9}
 qdeclare_builtin_metatype! {QString => 10}
 qdeclare_builtin_metatype! {QByteArray => 12}
@@ -494,6 +495,7 @@ qdeclare_builtin_metatype! {QJsonArray => 47}
 qdeclare_builtin_metatype! {QPixmap => if cfg!(qt_6_0) { 0x1001 } else { 65 }}
 qdeclare_builtin_metatype! {QColor => if cfg!(qt_6_0) { 0x1003 } else { 67 }}
 qdeclare_builtin_metatype! {QImage => if cfg!(qt_6_0) { 0x1006 } else { 70 }}
+qdeclare_builtin_metatype! {QStringList => 11}
 
 #[cfg(target_pointer_width = "32")]
 qdeclare_builtin_metatype! {isize  => 2} // That's QMetaType::Int
@@ -663,5 +665,14 @@ mod tests {
             QSize::from_qvariant(QSizeF { width: 123.1, height: 254.2 }.to_qvariant()),
             Some(QSize { width: 123, height: 254 })
         );
+    }
+
+    #[test]
+    fn test_qvariant_qstringlist() {
+        let list = QStringList::from(["abc", "def"]);
+        let t = QVariant::from(list.clone());
+
+        assert!(t == list.to_qvariant());
+        assert!(QStringList::from_qvariant(t).unwrap() == list);
     }
 }

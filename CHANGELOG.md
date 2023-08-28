@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## 0.2.9 2023-06-15
+
+ - Implement QMetaType for QStringList and QVariantMap
+ - Added QGlobalColor
+ - implemented Add and AddAsing for QString
+ - Added QVariant::is_null
+ - Expose begin_move_rows and end_move_rows
+ - Fixed UTF8 in QJSonObject
+ - Fixed compulation with Qt 6.5
+
+## 0.2.8 2022-02-25 (qttype only)
+
+ - Fix qttype crate always being rebuilt (#252)
+
+## 0.2.7 2022-02-23
+
+ - Expand the API of QStringList, QString
+ - Expand the API of QJSValue
+ - Added QVariantMap
+ - Add wrapper around qmlRegisterModule
+ - Fix compilation with Qt 6.3 and MSVC
+ - qttypes: Expose the flags through a COMPILE_FLAGS env variable
+
+
 ## 0.2.6 2021-11-19 (qttype only)
 
  - Fix build when Qt is not found and the required feature is off
