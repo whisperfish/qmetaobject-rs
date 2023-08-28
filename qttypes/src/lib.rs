@@ -749,12 +749,14 @@ where
 impl<K, V, const N: usize> From<[(K, V); N]> for QVariantMap
 where
     K: Into<QString>,
+    K: Clone,
     V: Into<QVariant>,
+    V: Clone,
 {
     fn from(m: [(K, V); N]) -> Self {
         let mut temp = QVariantMap::default();
-        for (key, val) in m {
-            temp.insert(key.into(), val.into());
+        for (key, val) in &m {
+            temp.insert(key.clone().into(), val.into());
         }
         temp
     }

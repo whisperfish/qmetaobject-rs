@@ -70,11 +70,12 @@ impl fmt::Debug for QStringList {
 impl<T, const N: usize> From<[T; N]> for QStringList
 where
     QString: From<T>,
+    T: Clone,
 {
     fn from(s: [T; N]) -> Self {
         let mut list = QStringList::new();
-        for i in s {
-            list.push(QString::from(i));
+        for i in &s {
+            list.push(QString::from(i.clone()));
         }
         list
     }
