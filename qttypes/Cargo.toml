@@ -1,6 +1,6 @@
 [package]
 name = "qttypes"
-version = "0.2.6"
+version = "0.2.9"
 edition = "2018"
 authors = ["Olivier Goffart <ogoffart@woboq.com>"]
 build = "build.rs"
@@ -11,6 +11,7 @@ categories = ["api-bindings"]
 keywords = ["Qt", "QtCore", "QtGui"]
 repository = "https://github.com/woboq/qmetaobject-rs"
 links = "qt"
+rust-version = "1.56"
 
 [features]
 # When this feature is enabled (the default), the build script will panic with an error
@@ -44,6 +45,7 @@ semver = "1"
 
 [dev-dependencies]
 tempfile = { version = "3.4.0", default-features = false }
+cpp_build = "0.5.6"
 
 [package.metadata.docs.rs]
 dependencies = [ "qtbase5-dev", "qtdeclarative5-dev" ]

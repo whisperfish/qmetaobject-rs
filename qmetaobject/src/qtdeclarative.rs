@@ -199,6 +199,8 @@ impl QmlEngine {
         let args_size = args.len();
         let args_ptr = args.as_ptr();
 
+        assert!(args_size <= 9);
+
         cpp!(unsafe [
             self as "QmlEngineHolder *",
             name as "QByteArray",
@@ -211,16 +213,20 @@ impl QmlEngine {
                 return {};
             }
             QVariant ret;
-            QGenericArgument args[9] = {};
-            for (uint i = 0; i < args_size; ++i) {
-                args[i] = Q_ARG(QVariant, args_ptr[i]);
+            #define INVOKE_METHOD(...) QMetaObject::invokeMethod(robjs.first(), name, Q_RETURN_ARG(QVariant, ret) __VA_ARGS__);
+            switch (args_size) {
+                case 0: INVOKE_METHOD(); break;
+                case 1: INVOKE_METHOD(, Q_ARG(QVariant, args_ptr[0])); break;
+                case 2: INVOKE_METHOD(, Q_ARG(QVariant, args_ptr[0]), Q_ARG(QVariant, args_ptr[1])); break;
+                case 3: INVOKE_METHOD(, Q_ARG(QVariant, args_ptr[0]), Q_ARG(QVariant, args_ptr[1]), Q_ARG(QVariant, args_ptr[2])); break;
+                case 4: INVOKE_METHOD(, Q_ARG(QVariant, args_ptr[0]), Q_ARG(QVariant, args_ptr[1]), Q_ARG(QVariant, args_ptr[2]), Q_ARG(QVariant, args_ptr[3])); break;
+                case 5: INVOKE_METHOD(, Q_ARG(QVariant, args_ptr[0]), Q_ARG(QVariant, args_ptr[1]), Q_ARG(QVariant, args_ptr[2]), Q_ARG(QVariant, args_ptr[3]), Q_ARG(QVariant, args_ptr[4])); break;
+                case 6: INVOKE_METHOD(, Q_ARG(QVariant, args_ptr[0]), Q_ARG(QVariant, args_ptr[1]), Q_ARG(QVariant, args_ptr[2]), Q_ARG(QVariant, args_ptr[3]), Q_ARG(QVariant, args_ptr[4]), Q_ARG(QVariant, args_ptr[5])); break;
+                case 7: INVOKE_METHOD(, Q_ARG(QVariant, args_ptr[0]), Q_ARG(QVariant, args_ptr[1]), Q_ARG(QVariant, args_ptr[2]), Q_ARG(QVariant, args_ptr[3]), Q_ARG(QVariant, args_ptr[4]), Q_ARG(QVariant, args_ptr[5]), Q_ARG(QVariant, args_ptr[6])); break;
+                case 8: INVOKE_METHOD(, Q_ARG(QVariant, args_ptr[0]), Q_ARG(QVariant, args_ptr[1]), Q_ARG(QVariant, args_ptr[2]), Q_ARG(QVariant, args_ptr[3]), Q_ARG(QVariant, args_ptr[4]), Q_ARG(QVariant, args_ptr[5]), Q_ARG(QVariant, args_ptr[6]), Q_ARG(QVariant, args_ptr[7])); break;
+                case 9: INVOKE_METHOD(, Q_ARG(QVariant, args_ptr[0]), Q_ARG(QVariant, args_ptr[1]), Q_ARG(QVariant, args_ptr[2]), Q_ARG(QVariant, args_ptr[3]), Q_ARG(QVariant, args_ptr[4]), Q_ARG(QVariant, args_ptr[5]), Q_ARG(QVariant, args_ptr[6]), Q_ARG(QVariant, args_ptr[7]), Q_ARG(QVariant, args_ptr[8])); break;
             }
-            QMetaObject::invokeMethod(
-                robjs.first(),
-                name,
-                Q_RETURN_ARG(QVariant, ret),
-                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8]
-            );
+            #undef INVOKE_METHOD
             return ret;
         })
     }
@@ -299,7 +305,7 @@ impl Default for QQuickView {
 }
 
 /// See QQmlComponent::CompilationMode
-#[repr(u32)]
+#[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CompilationMode {
     PreferSynchronous,
@@ -307,7 +313,7 @@ pub enum CompilationMode {
 }
 
 /// See QQmlComponent::Status
-#[repr(u32)]
+#[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ComponentStatus {
     Null,
@@ -506,11 +512,7 @@ pub fn qml_register_type<T: QObject + Default + Sized>(
 ///
 /// [qt]: https://doc.qt.io/qt-5/qqmlengine.html#qmlRegisterModule
 #[cfg(qt_5_9)]
-pub fn qml_register_module(
-    uri: &CStr,
-    version_major: u32,
-    version_minor: u32,
-) {
+pub fn qml_register_module(uri: &CStr, version_major: u32, version_minor: u32) {
     let uri_ptr = uri.as_ptr();
 
     cpp!(unsafe [
@@ -889,7 +891,7 @@ impl<'a> dyn QQuickItem + 'a {
 /// Only a specific subset of [`QEvent::Type`][qt] enum.
 ///
 /// [qt]: https://doc.qt.io/qt-5/qevent.html#Type-enum
-#[repr(u32)]
+#[repr(C)]
 #[non_exhaustive]
 pub enum QMouseEventType {
     MouseButtonPress = 2,

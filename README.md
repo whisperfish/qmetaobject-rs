@@ -1,6 +1,5 @@
 # QMetaObject crate for Rust
 
-[![Appveyor Build status](https://ci.appveyor.com/api/projects/status/8l5te3wlj2ie4njc/branch/master?svg=true)](https://ci.appveyor.com/project/ogoffart/qmetaobject-rs/branch/master)
 [![Crates.io](https://img.shields.io/crates/v/qmetaobject.svg)](https://crates.io/crates/qmetaobject)
 [![Documentation](https://docs.rs/qmetaobject/badge.svg)](https://docs.rs/qmetaobject/)
 
@@ -226,7 +225,7 @@ impl Graph {
 Alternatively, we could add a proper method wrapper, and call it without `unsafe`:
 
 ```rust
-#[repr(u32)]
+#[repr(C)]
 enum QQuickItemFlag {
     ItemClipsChildrenToShape = 0x01,
     ItemAcceptsInputMethod = 0x02,
@@ -283,3 +282,33 @@ method. Now send us a Pull Request. 🙂
 [`QObjectPinned`]: https://docs.rs/qmetaobject/latest/qmetaobject/struct.QObjectPinned.html
 [`QVariant`]: https://docs.rs/qmetaobject/latest/qmetaobject/struct.QVariant.html
 [docs.qttypes]: https://docs.rs/qttypes/latest/qttypes/#cargo-features
+
+## Comparison with other projects
+
+This crate objective is to make idiomatic Rust bindings for QML (and only QML, no QWidgets or other
+non-graphical Qt API) in a way that doesn't need you to know or use C++ and other build system.
+This crates is the best achieving this.
+
+* **[CXX-Qt](https://github.com/KDAB/cxx-qt/)** still makes you to write a bit of boiler-plate code
+  in C++ and use extra build step to compile the C++.
+  CXX-Qt is ideal to bring some Rust in an existing C++ project. But less so when you just want to
+  make an UI for a Rust-only application.
+
+  The CXX-Qt is also  more recent that this crate and make use of Rust features such as attribute
+  macro, that did not  exist when the qmetaobject crate was designed.
+  (Only derive procedural macro were available in stable rust rust at the time)
+
+* Similarly, the **[Rust Qt Binding Generator](https://invent.kde.org/sdk/rust-qt-binding-generator)**
+  is another project that helps to integrate Rust logic in an existing C++/Qt project. This was also
+  created before rust had procedural macros, so it uses an external .json file to generate C++ and
+  Rust code.
+
+* There exist also a bunch of older crates that tries to provide Rust binding around the Qt C++ API.
+  Often automatically generated, these bindings are not idiomatic Rust, require unsafe code to use,
+  and are not maintained anymore.
+
+* **[Slint](https://slint-ui.com)** is a project created by the same author of this crate.
+  It is not a QML or Qt binding at all, but rather a new language similar to QML, entirely
+  implemented in Rust.
+  It has the same goal as providing a new to add a UI to a Rust project with idiomatic Rust API,
+  but instead of using QML for the UI, it uses its own language.
