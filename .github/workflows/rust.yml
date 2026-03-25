@@ -19,6 +19,13 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         qt: [5.15.2, 5.9.9, 5.12.9]
         rust: [stable, nightly]
+        coverage: [false]
+        include:
+          - os: ubuntu-latest
+            # Set to the latest supported Qt for coverage testing.
+            qt: 5.15.2
+            coverage: true
+            rust: stable
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
@@ -41,6 +48,22 @@ jobs:
       run: cargo test --all-features
       shell: bash
 
+    - name: Install cargo-llvm-cov
+      uses: taiki-e/install-action@cargo-llvm-cov
+      if: ${{ matrix.coverage }}
+
+    - name: Run tests with coverage
+      run: cargo llvm-cov --all-features --lcov --output-path lcov.info
+      if: ${{ matrix.coverage }}
+
+    - name: Upload coverage reports to Codecov with GitHub Action
+      uses: codecov/codecov-action@v5
+      if: ${{ matrix.coverage }}
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      with:
+        files: lcov.info
+        fail_ci_if_error: true
 
   # Qt6 is in a different job right now because it does not have many modules and most example don't compile
   qt6:
