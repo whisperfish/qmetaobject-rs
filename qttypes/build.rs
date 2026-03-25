@@ -247,6 +247,8 @@ fn main() {
     link_lib("Widgets");
     #[cfg(feature = "qtquick")]
     link_lib("Quick");
+    #[cfg(feature = "qtquicktest")]
+    link_lib("QuickTest");
     #[cfg(feature = "qtquick")]
     link_lib("Qml");
     #[cfg(feature = "qtwebengine")]
